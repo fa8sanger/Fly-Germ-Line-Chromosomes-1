@@ -13,12 +13,8 @@ outgroup = 'dmel'
 cecidomyiidae = ['aaphi', 'contarinia', 'orobi']
 sciaridae = set(['bcop', 'ling', 'phyg','bimp'])
 
-# l_string = 'L-sciara_coprophila'
-# a_string = 'A-sciara_coprophila'
-# na_string = 'NA-sciara_coprophila'
-# 'A-sciara_coprophila'
-# sciaridae = set(['phytosciara_flavipes', 'trichosia_splendens'])
-# cecidomyiidae = set(['mayetiola_destructor', 'porricondyla_nigripennis', 'catotricha_subobsoleta', 'lestremia_cinerea'])
+def is_just_grcs(clade):
+    return(all(['grc' in tip.name for tip in clade.get_terminals()]))
 
 def is_monophyletic_sciaridae(clade):
     return(all([tip.name.split('_')[0] in sciaridae for tip in clade]))
@@ -42,6 +38,15 @@ def print_assignment_group(tree_name, subtree, assignment):
 
 def print_no_assignment_orthogroup(tree_name):
     sys.stdout.write("\t".join([tree_name, 'NA', 'NA', 'other', 'NA']) + '\n')            
+
+def find_family_splitting_clade(node_to_test, tree_name):
+    if is_just_grcs(node_to_test.clades[0]): # if all in one branch are just GRC genes
+        print_assignment_group(tree_name, node_to_test.clades[0], 'other') # those will be assinged as 'other'
+        return(find_family_splitting_clade(node_to_test.clades[1], tree_name)) # and we continue the search for the node that splits families
+    if is_just_grcs(node_to_test.clades[1]): # if all in the other branch are just GRC genes ...
+        print_assignment_group(tree_name, node_to_test.clades[1], 'other')
+        return(find_family_splitting_clade(node_to_test.clades[0], tree_name))
+    return(node_to_test) # if not, then the split is separating families (or at least family members)
 
 def tree2assigments(input_newick):
     tree_name = input_newick.split('/')[-1:][0].split('_')[0]
@@ -71,39 +76,28 @@ def tree2assigments(input_newick):
     else:
         gnat_subtree = tree.root.clades[1]
 
+    gnat_subtree = find_family_splitting_clade(gnat_subtree, tree_name)
+
     gnats1 = gnat_subtree.clades[0].get_terminals()
     gnats2 = gnat_subtree.clades[1].get_terminals()
-
-    sciaridae_subtree_identified = False
-    cecidomyiidae_subtree_identified = False
+        
     if is_monophyletic_sciaridae(gnats1):
         sciaridae_subtree = gnats1
-        sciaridae_subtree_identified = True
     elif is_monophyletic_cecidomyiidae(gnats1):
         cecidomyiidae_subtree = gnats1
-        cecidomyiidae_subtree_identified = True
     else:
-        sys.stderr.write(tree_name + ': one gnat subclade is not monophyletic\n')
+        sys.stderr.write(tree_name + ': families are not monophyletic\n')
         print_no_assignment_orthogroup(tree_name)
         return(0)
 
-    if is_monophyletic_sciaridae(gnats2) and not sciaridae_subtree_identified:
+    if is_monophyletic_sciaridae(gnats2):
         sciaridae_subtree = gnats2
-        sciaridae_subtree_identified = True
-    elif is_monophyletic_cecidomyiidae(gnats2) and not cecidomyiidae_subtree_identified:
+    elif is_monophyletic_cecidomyiidae(gnats2):
         cecidomyiidae_subtree = gnats2
-        cecidomyiidae_subtree_identified = True
     else:
-        sys.stderr.write(tree_name + ': one gnat subclade is not monophyletic\n')
+        sys.stderr.write(tree_name + ': families are not monophyletic\n')
         print_no_assignment_orthogroup(tree_name)
         return(0)
-    
-    if not (cecidomyiidae_subtree_identified and sciaridae_subtree_identified):
-        sys.stderr.write(tree_name + ': sciaridae or cecidomyiidae are not monophyletic\n')
-        classification = 'other'
-        print_no_assignment_orthogroup(tree_name)
-        # for tip in tree.get_terminals():
-        #     print
 
     print_assignment_group(tree_name, sciaridae_subtree, 'sciaridae')
     print_assignment_group(tree_name, cecidomyiidae_subtree, 'cecidomyiidae')
@@ -120,8 +114,8 @@ tree_files = os.listdir('data/testing_trees/')
 sys.stdout.write('orthogroup\tspecies\tgene\tclassification\tbranch_lengths\n')
 
 for file in tree_files:
+    # file = 'OG0003003_tree.txt'
     # print(file)
-    gene = file.split('.')[0] # this is wrong
     input_newick = input_dir + '/' + file
     tree2assigments(input_newick)
     # sys.stdout.write(gene + '\t' + tree2assigments(input_newick) + '\n')
