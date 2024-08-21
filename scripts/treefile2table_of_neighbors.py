@@ -2,151 +2,149 @@
 
 import os
 from collections import defaultdict
-import numpy as np
+# import numpy as np
 from Bio import Phylo
 import sys
 
-l_string = 'L-sciara_coprophila'
-a_string = 'A-sciara_coprophila'
-na_string = 'NA-sciara_coprophila'
+# species in the analysis
+outgroup = 'dmel'
+possible_grcs = ['bcop_grc', 'bimp_grc', 'ling_grc']
+sciarid_core = ['bcop_core', 'bimp_core', 'ling_core', 'phyg']
+cecidomyiidae = ['aaphi', 'contarinia', 'orobi']
+possible_Sciaridae = set(['bcop', 'ling', 'phyg','bimp'])
+
+# l_string = 'L-sciara_coprophila'
+# a_string = 'A-sciara_coprophila'
+# na_string = 'NA-sciara_coprophila'
 # 'A-sciara_coprophila'
-sciaridae = set(['phytosciara_flavipes', 'trichosia_splendens'])
-cecidomyiidae = set(['mayetiola_destructor', 'porricondyla_nigripennis', 'catotricha_subobsoleta', 'lestremia_cinerea'])
+# sciaridae = set(['phytosciara_flavipes', 'trichosia_splendens'])
+# cecidomyiidae = set(['mayetiola_destructor', 'porricondyla_nigripennis', 'catotricha_subobsoleta', 'lestremia_cinerea'])
+
+def is_monophyletic_sciaridae(clade):
+    return(all([tip.name.split('_')[0] in possible_Sciaridae for tip in clade]))
+
+def is_monophyletic_cecidomyiidae(clade):
+    return(all([tip.name.split('_')[0] in cecidomyiidae or 'grc' in tip.name for tip in clade]))
 
 def tip2sp_name(tip):
-    return("_".join(tip.name.split('_')[:2]).rstrip("'"))
+    return(tip.name.split('_')[0])
 
-def tip2scf(tip):
-    return("_".join(tip.name.split('_')[2:4]).rstrip("'"))
-
-def path2node(path):
-    if len(path) == 1:
-        return(path[0])
-    for clade in reversed(path[:-1]):
-        terminals = clade.get_terminals()
-        # if all tips are L tips, skip
-        if all(['sciara_coprophila' in tip2sp_name(t) for t in terminals]):
-            continue
-        # if the bootstrap confidence is smaller than...
-        try:
-            if float(clade.name.split('/')[0]) < 60:
-                continue
-        except AttributeError:
-            continue
-        break
-    return(clade)
-
-def get_basal_sp(last_node):
-    for clade in last_node.clades:
-        if clade.is_terminal():
-            return(clade)
-    return('NA')
-
-def indices2assignment(clades, present_sciaridae, target_clade, basal_sp):
-    member_sciaridae = False
-    member_cecidomyiidae = False
-    member_others = False
-    # these will serve to evaluate if the gene copy falls as internal branch of sciaridae or not
-    outgroup_sciaridae = present_sciaridae.copy()
-    for clade in clades:
-        sp = tip2sp_name(clade)
-        # this handles all the cases when evaluating members of sciaridae
-        if sp in present_sciaridae:
-            try:
-                # this is to keep track is all sciaridae are show monophyly (i.e. if the gene is _o or _i)
-                outgroup_sciaridae.remove(sp)
-            except KeyError:
-                continue
-            # bradysia nodes wont be considered for phylogenetic placement (that needs to be a different member of sciaridae)
-            if 'sciara_coprophila' in sp:
-                continue
-            else:
-                member_sciaridae = True
-                continue
-
-        if sp in cecidomyiidae:
-            member_cecidomyiidae = True
-            continue
-        else:
-            member_others = True
-
-    if member_sciaridae and not member_cecidomyiidae and not member_others:
-        if outgroup_sciaridae == set() and target_clade == basal_sp:
-            return "sciaridae_o"
-        else:
-            return "sciaridae_i"
-    if member_cecidomyiidae and not member_sciaridae and not member_others:
-        return "cecidomyiidae"
-    return "other"
+def tip2gene(tip):
+    return("_".join(tip.name.split('_')[-1:]).rstrip("'"))
 
 def tree2assigments(input_newick):
+    tree_name = input_newick.split('/')[-1:][0].split('_')[0]
     tree = Phylo.read(input_newick, "newick")
 
-    # print('parsing: ' + input_newick)
     sp2node_name = defaultdict(list)
-    present_Sciaridae = set()
-    possible_Sciaridae = set(['phytosciara_flavipes', 'trichosia_splendens', 'A-sciara_coprophila', 'L-sciara_coprophila', 'NA-sciara_coprophila'])
-    sciaridae_tips = []
     for tip in tree.get_terminals():
-        sp = "_".join(tip.name.split('_')[:2]).rstrip("'")
+        sp = tip.name.split('_')[0]
         sp2node_name[sp].append(tip)
-        if sp in possible_Sciaridae:
-            # defining which sciaridae are present in the treefile
-            present_Sciaridae.add(sp)
-            sciaridae_tips.append(tip)
 
-    # print('testing monophyly')
-    # if tree.is_monophyletic(sciaridae_tips):
-    #     print("sciaridae are monophyletic")
-    # else:
-    #     print("they are not")
+    # This commented out bit is testing for monophyly of all sciarid and all cecidomyiidae branches
+    # print('parsing: ' + input_newick)
+    # sp2node_name = defaultdict(list)
+    # present_Sciaridae = set()
+    # sciaridae_tips = []
+    # cecidomyiidae_tips = []
+    # for tip in tree.get_terminals():
+    #     sp = tip.name.split('_')[0]
+    #     is_grc = 'grc' in tip.name
+    #     # sp = "_".join(tip.name.split('_')[:2]).rstrip("'")
+    #     sp2node_name[sp].append(tip)
+    #     if sp in cecidomyiidae:
+    #         cecidomyiidae_tips.append(tip)
 
-    tree_type = []
-    assignments = []
-    branch_lengths = []
-    confidence = []
-    scfs = []
+    #     if sp in possible_Sciaridae and not is_grc:
+    #         # defining which sciaridae are present in the treefile
+    #         present_Sciaridae.add(sp)
+    #         sciaridae_tips.append(tip)
 
-    for target_clade in sp2node_name[l_string] + sp2node_name[a_string] + sp2node_name[na_string]:
-        if target_clade in sp2node_name[l_string]:
-            tree_type.append('L')
-        if target_clade in sp2node_name[a_string]:
-            tree_type.append('A')
-        if target_clade in sp2node_name[na_string]:
-            tree_type.append('NA')
-        last_node = path2node(tree.get_path(target_clade))
-        basal_sp = get_basal_sp(last_node)
-        monophy_terminal = last_node.get_terminals()
-        asn = indices2assignment(monophy_terminal, present_Sciaridae, target_clade, basal_sp)
-        if asn[0:9] == 'sciaridae' and (not tree.is_monophyletic(sciaridae_tips) or len(present_Sciaridae) != 4):
-            # print('changing assignment')
-            asn = 'sciaridae'
-        assignments.append(asn)
-        branch_lengths.append(target_clade.branch_length)
-        try:
-            node_conf = float(last_node.name.split('/')[0])
-        except ValueError:
-            node_conf = -1
-        confidence.append(node_conf)
-        scfs.append(tip2scf(target_clade))
+    # if not all([tip.name.split('_')[0] in possible_Sciaridae for tip in tree.common_ancestor(sciaridae_tips).get_terminals()]):
+    #     print("Non-monophyletic sciaridae") # this tests if all the non-GRC Sciarid genes are monophyletic, while disregarding GRCs for the purpose of the test (which is the reason why we had to use this oneline instead of is_monophyletic)
 
-    tree_type_str = ','.join(tree_type)
-    asn_str = ','.join(assignments)
-    branch_len_str = ','.join([str(l) for l in branch_lengths])
-    confidence_str = ','.join([str(c) for c in confidence])
-    scf_str = ','.join(scfs)
-    return("\t".join([tree_type_str, scf_str, asn_str, confidence_str, branch_len_str]))
+    # if not all([tip.name.split('_')[0] in cecidomyiidae or 'grc' in tip.name for tip in tree.common_ancestor(cecidomyiidae_tips).get_terminals()]):
+    #     print("Non-monophyletic cecidomyiidae") # the same test for cecidomyiidae, but explicitly filtering grc genes (because they are not cecidomyiidae);
+
+    if not sp2node_name['dmel']:
+        sys.stderr.write("Outgroup (Dmel) absent\n")
+        sys.stdout.write("\t".join([tree_name, 'NA', 'NA', 'other', 'NA']) + '\n')
+        return(0)
 
 
-input_dir = sys.argv[1]
-tree_files = [i for i in os.listdir(input_dir) if i.endswith('treefile')]
+    tree.root_with_outgroup(sp2node_name['dmel'][0])
+    
+    if tree.root.clades[0] != sp2node_name['dmel'][0]:
+        gnat_subtree = tree.root.clades[0]
+    else:
+        gnat_subtree = tree.root.clades[1]
+
+    gnats1 = gnat_subtree.clades[0].get_terminals()
+    gnats2 = gnat_subtree.clades[1].get_terminals()
+
+    sciaridae_subtree_identified = False
+    cecidomyiidae_subtree_identified = False
+    if is_monophyletic_sciaridae(gnats1):
+        sciaridae_subtree = gnats1
+        sciaridae_subtree_identified = True
+    elif is_monophyletic_cecidomyiidae(gnats1):
+        cecidomyiidae_subtree = gnats1
+        cecidomyiidae_subtree_identified = True
+    else:
+        sys.stderr.write('one gnat subclade is not monophyletic\n')
+        sys.stdout.write("\t".join([tree_name, 'NA', 'NA', 'other', 'NA']) + '\n')
+        return(0)
+
+    if is_monophyletic_sciaridae(gnats2) and not sciaridae_subtree_identified:
+        sciaridae_subtree = gnats2
+        sciaridae_subtree_identified = True
+    elif is_monophyletic_cecidomyiidae(gnats2) and not cecidomyiidae_subtree_identified:
+        cecidomyiidae_subtree = gnats2
+        cecidomyiidae_subtree_identified = True
+    else:
+        sys.stderr.write('one gnat subclade is not monophyletic\n')
+        sys.stdout.write("\t".join([tree_name, 'NA', 'NA', 'other', 'NA']) + '\n')
+        return(0)
+    
+    if not (cecidomyiidae_subtree_identified and sciaridae_subtree_identified):
+        sys.stderr.write('sciaridae or cecidomyiidae are not monophyletic\n')
+        classification = 'other'
+        sys.stdout.write("\t".join([tree_name, 'NA', 'NA', 'Other', 'NA']) + '\n')
+        # for tip in tree.get_terminals():
+        #     print
+
+    for sciarid_tip in sciaridae_subtree:
+        if 'grc' in sciarid_tip.name:
+            sp = tip2sp_name(sciarid_tip)
+            classification = 'sciaridae'
+            gene = tip2gene(sciarid_tip)
+            branch_length = str(sciarid_tip.branch_length)
+            sys.stdout.write("\t".join([tree_name, sp, gene, classification, branch_length]) + '\n')
+
+    for cecido_tip in cecidomyiidae_subtree:
+        if 'grc' in cecido_tip.name:
+            sp = tip2sp_name(cecido_tip)
+            classification = 'cecidomyiidae'
+            gene = tip2gene(cecido_tip)
+            branch_length = str(cecido_tip.branch_length)
+            sys.stdout.write("\t".join([tree_name, sp, gene, classification, branch_length]) + '\n')
+
+    return(0)
+
+
+# input_dir = sys.argv[1]
+input_dir = 'data/testing_trees'
+# tree_files = [i for i in os.listdir(input_dir) if i.endswith('treefile')]
+tree_files = os.listdir('data/testing_trees/')
 
 # with open('tables/L-busco-phylogenies-summary.tsv', 'w') as tab:
 sys.stdout.write('BUSCO_id\ttype\tscfs\tgene_tree_location\tbootstraps\tbranch_lengths\n')
 
 for file in tree_files:
-    gene = file.split('.')[0]
+    # file = 'OG0003006_tree.txt'
+    gene = file.split('.')[0] # this is wrong
     input_newick = input_dir + '/' + file
-    sys.stdout.write(gene + '\t' + tree2assigments(input_newick) + '\n')
+    tree2assigments(input_newick)
+    # sys.stdout.write(gene + '\t' + tree2assigments(input_newick) + '\n')
 
 
